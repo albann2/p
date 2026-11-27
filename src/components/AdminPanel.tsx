@@ -74,10 +74,12 @@ export default function AdminPanel({ onDataChanged }: Props) {
         <section>
           <h3>1 · Charger les données</h3>
           <p className="muted small">
-            CSV avec en-têtes&nbsp;: FirstName (ou prénom), LastName (ou nom — colonne unique
-            <em>&nbsp;nom&nbsp;</em> acceptée, ou full_name pour «&nbsp;Prénom Nom&nbsp;»), email, telephone,
-            date_naissance, adresse, region, profession, motivation, observation, statut.
-            Le remplacement est total.
+            CSV avec les en-têtes d'origine&nbsp;: Status, FirstName, LastName, Gender, Phone,
+            Email, CountryOfStudy, Nationality, CityVillage, Level, School, SchoolCategory,
+            SchoolSection, StudyField, Grade, DocumentCount, SubmittedAt (les alias français
+            prénom / nom / téléphone / statut restent acceptés). Le remplacement est total&nbsp;:
+            les observations déjà saisies par le jury sont effacées, sauf si votre fichier
+            contient une colonne <em>Observation</em> remplie.
           </p>
           <input
             ref={fileRef}

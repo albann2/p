@@ -12,7 +12,7 @@ import {
   getCachedCandidates,
   getOfflineEnabled,
   setOfflineEnabled,
-  queueStatusChange,
+  queueChange,
   updateCachedCandidate,
   getPendingChanges,
   clearAllLocalData
@@ -80,6 +80,11 @@ export default function App() {
         const cached = await getCachedCandidates()
         setTotal(cached.length)
         setCandidates(cached)
+        if (cached.length > 0) {
+          showToast('Base Supabase injoignable — affichage des données en cache local.')
+        } else {
+          showToast('Base Supabase injoignable. Vérifiez l\'URL et la clé dans .env, puis redéployez.')
+        }
       } finally {
         setLoading(false)
       }
@@ -154,12 +159,12 @@ export default function App() {
         await updateCandidate(id, { status })
         showToast('Statut enregistré.')
       } catch {
-        await queueStatusChange({ candidateId: id, status, savedAt: new Date().toISOString() })
+        await queueChange({ candidateId: id, status, savedAt: new Date().toISOString() })
         await updateCachedCandidate(id, { status })
         showToast('Modification enregistrée localement, sera synchronisée.')
       }
     } else {
-      await queueStatusChange({ candidateId: id, status, savedAt: new Date().toISOString() })
+      await queueChange({ candidateId: id, status, savedAt: new Date().toISOString() })
       await updateCachedCandidate(id, { status })
       showToast('Hors connexion : modification enregistrée localement, sera synchronisée.')
     }
@@ -171,10 +176,17 @@ export default function App() {
 
   async function handleObservationSave(id: string, observation: string) {
     if (navigator.onLine && isSupabaseConfigured) {
-      await updateCandidate(id, { observation })
-      await updateCachedCandidate(id, { observation })
-      showToast('Observation enregistrée.')
+      try {
+        await updateCandidate(id, { observation })
+        await updateCachedCandidate(id, { observation })
+        showToast('Observation enregistrée.')
+      } catch {
+        await queueChange({ candidateId: id, observation, savedAt: new Date().toISOString() })
+        await updateCachedCandidate(id, { observation })
+        showToast('Base injoignable : observation enregistrée localement, sera synchronisée.')
+      }
     } else {
+      await queueChange({ candidateId: id, observation, savedAt: new Date().toISOString() })
       await updateCachedCandidate(id, { observation })
       showToast('Hors connexion : observation enregistrée localement, sera synchronisée.')
     }
@@ -183,6 +195,7 @@ export default function App() {
         ? { name: 'detail', candidate: { ...v.candidate, observation } }
         : v
     )
+    setPendingCount((await getPendingChanges()).length)
   }
 
   if (!session) {

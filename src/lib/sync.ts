@@ -19,10 +19,19 @@ export async function syncPendingChanges(): Promise<{ sent: number; failed: numb
   let failed = 0
 
   for (const change of pending) {
+    const patch: { updated_at: string; status?: string; observation?: string } = {
+      updated_at: new Date().toISOString()
+    }
+    if (change.status) patch.status = change.status
+    if (change.observation !== undefined) patch.observation = change.observation
+    if (!change.status && change.observation === undefined) {
+      await removePendingChange(change.candidateId)
+      continue
+    }
     try {
       const { error } = await supabase
         .from('candidates')
-        .update({ status: change.status, updated_at: new Date().toISOString() })
+        .update(patch)
         .eq('id', change.candidateId)
       if (error) throw error
       await removePendingChange(change.candidateId)
@@ -48,7 +57,12 @@ export async function refreshCacheFromServer(): Promise<void> {
     const byId = new Map(pending.map((p) => [p.candidateId, p]))
     const merged = rows.map((r) => {
       const p = byId.get(r.id)
-      return p ? { ...r, status: p.status as CandidateStatus } : r
+      if (!p) return r
+      return {
+        ...r,
+        status: (p.status ?? r.status) as CandidateStatus,
+        observation: p.observation !== undefined ? p.observation : r.observation
+      }
     })
     await cacheCandidates(merged)
   } catch {

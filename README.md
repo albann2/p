@@ -14,8 +14,9 @@ des candidats à un prix et mettre à jour leur statut (`pending` → `approved`
     propre colonne, quel que soit le réglage régional (aucun séparateur à configurer).
 - **Utilisateurs lambda** : liste des candidats + **barre de recherche** (+ filtre de statut),
   bouton « Activer le mode hors connexion » (installe l'app sur l'appareil).
-- **Fiche candidat** (clic sur un nom) : toutes les infos en formulaire en lecture seule ;
-  seul le **statut** est modifiable, avec boîte de confirmation « Oui, valider ».
+- **Fiche candidat** (clic sur un nom) : toutes les infos du CSV en lecture seule ;
+  le **statut** est modifiable (avec confirmation « Oui, valider ») et le **jury peut saisir
+  une observation** (enregistrée à la sortie du champ, et avec la décision).
 - **Statut verrouillé** après validation (bloqué côté base par trigger SQL ET côté client).
 - **Tutoriel** en 5 étapes affiché après la première connexion (les 5 points du processus).
 - **Mode hors connexion** : les candidats sont mis en cache dans IndexedDB ; les changements de
@@ -41,14 +42,23 @@ des candidats à un prix et mettre à jour leur statut (`pending` → `approved`
 
 ## 2. Format du CSV d'import
 
-Séparateur `,` ou `;` reconnu automatiquement. En-têtes acceptés (alias français OK) :
+Séparateur `,` ou `;` reconnu automatiquement. Les colonnes sont **exactement celles du
+fichier d'origine** (`applications.csv`) :
 
 ```
-nom;email;telephone;date_naissance;adresse;region;profession;motivation;statut
+Status,FirstName,LastName,Gender,Phone,Email,CountryOfStudy,Nationality,
+CityVillage,Level,School,SchoolCategory,SchoolSection,StudyField,Grade,
+DocumentCount,SubmittedAt
 ```
 
-- `statut` : `pending` (défaut), `approved` ou `rejected`.
-- Colonnes absentes = valeurs vides.
+- `Status` : `pending` (défaut), `approved` ou `rejected`.
+- `SubmittedAt` : format du fichier (`11/22/2026, 5:20:58 PM`) ou ISO.
+- Colonnes absentes = valeurs vides. Alias français acceptés (`prénom`, `nom`, `téléphone`, `statut`…).
+- Une colonne `Observation` facultative est conservée si elle est présente.
+
+> ⚠️ L'import remplace **toutes** les données : les observations déjà saisies par le jury
+> sont perdues, sauf si vous exportez d'abord (bouton `.xlsx`), complétez la colonne
+> `Observation`, puis réimportez.
 
 ## 3. Développement
 

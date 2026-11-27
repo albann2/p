@@ -1,4 +1,4 @@
-import type { Candidate, CandidateInput } from '../types'
+import type { Candidate, CandidatePatch } from '../types'
 
 const DB_NAME = 'prix-candidats'
 const DB_VERSION = 1
@@ -79,7 +79,7 @@ export async function getCachedCandidate(id: string): Promise<Candidate | undefi
   )
 }
 
-export async function updateCachedCandidate(id: string, patch: CandidateInput): Promise<void> {
+export async function updateCachedCandidate(id: string, patch: CandidatePatch): Promise<void> {
   const c = await getCachedCandidate(id)
   if (!c) return
   await tx(STORE_CANDIDATES, 'readwrite', (s) => s.put({ ...c, ...patch }))
@@ -87,12 +87,28 @@ export async function updateCachedCandidate(id: string, patch: CandidateInput): 
 
 export interface PendingChange {
   candidateId: string
-  status: Candidate['status']
+  /** Décision du jury (facultative : une observation seule peut être en attente). */
+  status?: Candidate['status']
+  /** Observation du jury en attente d'envoi. */
+  observation?: string
   savedAt: string
 }
 
-export async function queueStatusChange(change: PendingChange): Promise<void> {
-  await tx(STORE_QUEUE, 'readwrite', (s) => s.put(change))
+export async function getPendingChange(candidateId: string): Promise<PendingChange | undefined> {
+  return tx<PendingChange | undefined>(STORE_QUEUE, 'readonly', (s) =>
+    s.get(candidateId) as IDBRequest<PendingChange | undefined>
+  )
+}
+
+/**
+ * Met en file d'attente une modification hors ligne. Les changements d'un même
+ * candidat sont fusionnés (statut + observation) au lieu de s'écraser.
+ */
+export async function queueChange(change: PendingChange): Promise<void> {
+  const existing = await getPendingChange(change.candidateId)
+  await tx(STORE_QUEUE, 'readwrite', (s) =>
+    s.put({ ...existing, ...change, candidateId: change.candidateId })
+  )
 }
 
 export async function getPendingChanges(): Promise<PendingChange[]> {

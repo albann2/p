@@ -1,4 +1,4 @@
-import type { Candidate, CandidateInput } from '../types'
+import type { Candidate, CandidateInput, CandidatePatch } from '../types'
 import { supabase, isSupabaseConfigured } from './supabase'
 import { downloadFile } from './csv'
 
@@ -87,7 +87,7 @@ export async function fetchCandidateById(id: string): Promise<Candidate | null> 
 
 export async function updateCandidate(
   id: string,
-  patch: CandidateInput
+  patch: CandidatePatch
 ): Promise<Candidate> {
   if (!isSupabaseConfigured) throw new Error('Supabase non configuré')
   const { data, error } = await supabase
@@ -130,25 +130,40 @@ export async function downloadXlsxFromDb(): Promise<Uint8Array> {
   const rows = await fetchAllCandidates()
   if (rows.length === 0) return new Uint8Array(0)
   const XLSX = await import('xlsx')
+  // En-têtes IDENTIQUES au CSV d'origine (+ Observation du jury) : le fichier
+  // téléchargé peut être réimporté tel quel après modification.
+  const headers = [
+    'Status', 'FirstName', 'LastName', 'Gender', 'Phone', 'Email',
+    'CountryOfStudy', 'Nationality', 'CityVillage', 'Level', 'School',
+    'SchoolCategory', 'SchoolSection', 'StudyField', 'Grade',
+    'DocumentCount', 'SubmittedAt', 'Observation'
+  ]
   const data = rows.map((r) => ({
+    Status: r.status,
     FirstName: r.first_name,
     LastName: r.last_name,
-    email: r.email ?? '',
-    phone: r.phone ?? '',
-    birth_date: r.birth_date ?? '',
-    address: r.address ?? '',
-    region: r.region ?? '',
-    profession: r.profession ?? '',
-    motivation: r.motivation ?? '',
-    observation: r.observation ?? '',
-    status: r.status
+    Gender: r.gender ?? '',
+    Phone: r.phone ?? '',
+    Email: r.email ?? '',
+    CountryOfStudy: r.country_of_study ?? '',
+    Nationality: r.nationality ?? '',
+    CityVillage: r.city_village ?? '',
+    Level: r.level ?? '',
+    School: r.school ?? '',
+    SchoolCategory: r.school_category ?? '',
+    SchoolSection: r.school_section ?? '',
+    StudyField: r.study_field ?? '',
+    Grade: r.grade ?? '',
+    DocumentCount: r.document_count ?? '',
+    SubmittedAt: r.submitted_at ?? '',
+    Observation: r.observation ?? ''
   }))
-  const ws = XLSX.utils.json_to_sheet(data, {
-    header: ['FirstName', 'LastName', 'email', 'phone', 'birth_date', 'address', 'region', 'profession', 'motivation', 'observation', 'status']
-  })
+  const ws = XLSX.utils.json_to_sheet(data, { header: headers })
   ws['!cols'] = [
-    { wch: 18 }, { wch: 18 }, { wch: 24 }, { wch: 16 }, { wch: 12 },
-    { wch: 28 }, { wch: 14 }, { wch: 18 }, { wch: 40 }, { wch: 24 }, { wch: 10 }
+    { wch: 10 }, { wch: 20 }, { wch: 22 }, { wch: 8 }, { wch: 16 },
+    { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 22 },
+    { wch: 34 }, { wch: 30 }, { wch: 22 }, { wch: 40 }, { wch: 8 },
+    { wch: 13 }, { wch: 22 }, { wch: 32 }
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Candidats')

@@ -10,6 +10,21 @@ interface Props {
   onObservationSave: (id: string, observation: string) => Promise<void>
 }
 
+const EMPTY = '—'
+
+function show(v: string | number | null | undefined): string | number {
+  if (v === null || v === undefined) return EMPTY
+  const s = String(v).trim()
+  return s === '' ? EMPTY : v
+}
+
+function formatDate(raw: string | null): string {
+  if (!raw) return EMPTY
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return raw
+  return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 export default function CandidateDetail({
   candidate,
   isAdmin,
@@ -23,7 +38,9 @@ export default function CandidateDetail({
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
 
+  /** Observation du jury : modifiable par tout utilisateur connecté. */
   const [obsDraft, setObsDraft] = useState(candidate.observation ?? '')
+  const [savedObservation, setSavedObservation] = useState(candidate.observation ?? '')
   const [obsSaving, setObsSaving] = useState(false)
   const [obsInfo, setObsInfo] = useState('')
 
@@ -31,6 +48,7 @@ export default function CandidateDetail({
   // L'utilisateur lambda verrouille un statut validé.
   // L'admin peut toujours revenir en arrière (remise en attente).
   const canEditStatus = isAdmin || !locked
+  const obsDirty = obsDraft !== savedObservation
 
   function askConfirm(next: CandidateStatus) {
     if (!canEditStatus) {
@@ -45,11 +63,36 @@ export default function CandidateDetail({
     return next === 'approved' ? 'approuver' : 'rejeter'
   }
 
+  async function persistObservation(): Promise<void> {
+    if (!obsDirty) return
+    setObsSaving(true)
+    try {
+      await onObservationSave(candidate.id, obsDraft)
+      setSavedObservation(obsDraft)
+      setObsInfo('Observation enregistrée.')
+    } finally {
+      setObsSaving(false)
+    }
+  }
+
+  async function saveObservation() {
+    if (!obsDirty) return
+    setObsInfo('')
+    try {
+      await persistObservation()
+    } catch (e) {
+      setObsInfo('')
+      setError(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement de l\'observation.')
+    }
+  }
+
   async function confirm() {
     if (!pendingConfirm) return
     setSaving(true)
     setError('')
     try {
+      // L'observation saisie avant la décision part avec elle.
+      await persistObservation()
       await onStatusChange(candidate.id, pendingConfirm)
       setStatus(pendingConfirm)
       setInfo(
@@ -67,21 +110,6 @@ export default function CandidateDetail({
     }
   }
 
-  async function saveObservation() {
-    if (obsDraft === (candidate.observation ?? '')) return
-    setObsSaving(true)
-    setObsInfo('')
-    try {
-      await onObservationSave(candidate.id, obsDraft)
-      setObsInfo('Observation enregistrée.')
-    } catch (e) {
-      setObsInfo('')
-      setError(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement de l\'observation.')
-    } finally {
-      setObsSaving(false)
-    }
-  }
-
   return (
     <div className="card">
       <button type="button" className="link back" onClick={onBack} aria-label="Retour">
@@ -96,6 +124,7 @@ export default function CandidateDetail({
       </div>
 
       <form className="detail-form" onSubmit={(e) => e.preventDefault()}>
+        <h3>Identité</h3>
         <div className="form-row">
           <label>
             Prénom
@@ -106,48 +135,98 @@ export default function CandidateDetail({
             <input value={candidate.last_name} readOnly />
           </label>
         </div>
+        <div className="form-row">
+          <label>
+            Sexe
+            <input value={show(candidate.gender)} readOnly />
+          </label>
+          <label>
+            Nationalité
+            <input value={show(candidate.nationality)} readOnly />
+          </label>
+        </div>
+
+        <h3>Contact</h3>
+        <div className="form-row">
+          <label>
+            Téléphone
+            <input value={show(candidate.phone)} readOnly />
+          </label>
+          <label>
+            Email
+            <input value={show(candidate.email)} readOnly />
+          </label>
+        </div>
         <label>
-          Email
-          <input value={candidate.email ?? ''} readOnly />
-        </label>
-        <label>
-          Téléphone
-          <input value={candidate.phone ?? ''} readOnly />
-        </label>
-        <label>
-          Date de naissance
-          <input value={candidate.birth_date ?? ''} readOnly />
-        </label>
-        <label>
-          Adresse
-          <input value={candidate.address ?? ''} readOnly />
-        </label>
-        <label>
-          Région
-          <input value={candidate.region ?? ''} readOnly />
-        </label>
-        <label>
-          Profession
-          <input value={candidate.profession ?? ''} readOnly />
-        </label>
-        <label>
-          Motivation
-          <textarea value={candidate.motivation ?? ''} readOnly rows={4} />
+          Ville / Village
+          <input value={show(candidate.city_village)} readOnly />
         </label>
 
-        {isAdmin && (
+        <h3>Études</h3>
+        <div className="form-row">
           <label>
-            Observation {obsSaving && <span className="muted small">(enregistrement…)</span>}
-            <textarea
-              value={obsDraft}
-              onChange={(e) => setObsDraft(e.target.value)}
-              onBlur={saveObservation}
-              rows={3}
-              placeholder="Observation réservée à l'admin…"
-            />
-            {obsInfo && <span className="muted small">{obsInfo}</span>}
+            Niveau
+            <input value={show(candidate.level)} readOnly />
           </label>
-        )}
+          <label>
+            Note (grade)
+            <input value={show(candidate.grade)} readOnly />
+          </label>
+        </div>
+        <label>
+          Établissement
+          <input value={show(candidate.school)} readOnly />
+        </label>
+        <div className="form-row">
+          <label>
+            Catégorie d'établissement
+            <input value={show(candidate.school_category)} readOnly />
+          </label>
+          <label>
+            Section
+            <input value={show(candidate.school_section)} readOnly />
+          </label>
+        </div>
+        <div className="form-row">
+          <label>
+            Filière
+            <input value={show(candidate.study_field)} readOnly />
+          </label>
+          <label>
+            Pays d'études
+            <input value={show(candidate.country_of_study)} readOnly />
+          </label>
+        </div>
+
+        <h3>Candidature</h3>
+        <div className="form-row">
+          <label>
+            Date de soumission
+            <input value={formatDate(candidate.submitted_at)} readOnly />
+          </label>
+          <label>
+            Nombre de documents
+            <input value={show(candidate.document_count)} readOnly />
+          </label>
+        </div>
+
+        <label>
+          Observation du jury {obsSaving && <span className="muted small">(enregistrement…)</span>}
+          <textarea
+            value={obsDraft}
+            onChange={(e) => {
+              setObsDraft(e.target.value)
+              setObsInfo('')
+            }}
+            onBlur={() => void saveObservation()}
+            rows={3}
+            placeholder="À remplir avant d'approuver ou de rejeter : motif, remarque sur le dossier…"
+          />
+          {obsDirty && !obsSaving && (
+            <span className="muted small">Modification non enregistrée (enregistrement à la sortie du champ).</span>
+          )}
+          {obsInfo && <span className="muted small">{obsInfo}</span>}
+        </label>
 
         <div className="status-actions">
           <label>Statut de la candidature</label>
@@ -155,7 +234,7 @@ export default function CandidateDetail({
             <button
               type="button"
               className={status === 'approved' ? 'chip active approved' : 'chip approved'}
-              disabled={!canEditStatus || saving || status === 'approved'}
+              disabled={!canEditStatus || saving || obsSaving || status === 'approved'}
               onClick={() => askConfirm('approved')}
             >
               ✓ Approuver
@@ -163,7 +242,7 @@ export default function CandidateDetail({
             <button
               type="button"
               className={status === 'rejected' ? 'chip active rejected' : 'chip rejected'}
-              disabled={!canEditStatus || saving || status === 'rejected'}
+              disabled={!canEditStatus || saving || obsSaving || status === 'rejected'}
               onClick={() => askConfirm('rejected')}
             >
               ✗ Rejeter
@@ -172,7 +251,7 @@ export default function CandidateDetail({
               <button
                 type="button"
                 className="chip pending"
-                disabled={saving || status === 'pending'}
+                disabled={saving || obsSaving || status === 'pending'}
                 onClick={() => askConfirm('pending')}
               >
                 ↺ Remettre en attente
@@ -206,7 +285,9 @@ export default function CandidateDetail({
             <p className="muted small">
               {pendingConfirm === 'pending'
                 ? 'Le statut repassera à « En attente ».'
-                : 'Cette action est définitive.'}
+                : obsDirty
+                  ? 'L\'observation saisie sera enregistrée avec la décision.'
+                  : 'Cette action est définitive.'}
             </p>
             <div className="modal-actions">
               <button type="button" onClick={() => setPendingConfirm(null)} disabled={saving}>

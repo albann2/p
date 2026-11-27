@@ -2,12 +2,12 @@ import type { CandidateInput, CandidateStatus } from '../types'
 
 /**
  * Parse un CSV (séparateur , ou ;) en objets CandidateInput.
- * En-têtes attendus (insensibles à la casse/accents/espaces) :
- *   firstname | prenom | first_name
- *   lastname  | nom    | last_name
- *   email, phone | telephone, birth_date | date_naissance,
- *   address | adresse, region, profession, motivation, observation,
- *   status | statut
+ *
+ * En-têtes reconnus — exactement ceux du fichier d'origine (applications.csv) :
+ *   Status, FirstName, LastName, Gender, Phone, Email, CountryOfStudy,
+ *   Nationality, CityVillage, Level, School, SchoolCategory, SchoolSection,
+ *   StudyField, Grade, DocumentCount, SubmittedAt
+ * Les alias français restent acceptés : prénom, nom, téléphone, statut, etc.
  * Accepte aussi une colonne unique full_name | nom_complet (découpée).
  */
 export function parseCsv(text: string): CandidateInput[] {
@@ -22,14 +22,21 @@ export function parseCsv(text: string): CandidateInput[] {
   const iFirst = idx('first_name', 'firstname', 'prenom')
   const iLast = idx('last_name', 'lastname', 'nom')
   const iFull = idx('full_name', 'nom_complet')
-  const iEmail = idx('email')
-  const iPhone = idx('phone', 'telephone')
-  const iBirth = idx('birth_date', 'date_naissance', 'date de naissance')
-  const iAddress = idx('address', 'adresse')
-  const iRegion = idx('region')
-  const iProfession = idx('profession')
-  const iMotivation = idx('motivation')
-  const iObservation = idx('observation')
+  const iGender = idx('gender', 'sexe', 'genre')
+  const iPhone = idx('phone', 'telephone', 'tel')
+  const iEmail = idx('email', 'mail', 'courriel')
+  const iCountryStudy = idx('country_of_study', 'countryofstudy', 'pays_etude', 'pays_d_etude')
+  const iNationality = idx('nationality', 'nationalite')
+  const iCity = idx('city_village', 'cityvillage', 'ville', 'ville_village')
+  const iLevel = idx('level', 'niveau')
+  const iSchool = idx('school', 'ecole', 'etablissement')
+  const iSchoolCategory = idx('school_category', 'schoolcategory', 'categorie_ecole')
+  const iSchoolSection = idx('school_section', 'schoolsection', 'section')
+  const iStudyField = idx('study_field', 'studyfield', 'filiere')
+  const iGrade = idx('grade', 'note', 'moyenne')
+  const iDocCount = idx('document_count', 'documentcount', 'nombre_documents')
+  const iSubmittedAt = idx('submitted_at', 'submittedat', 'date_soumission')
+  const iObservation = idx('observation', 'observations', 'remarque')
   const iStatus = idx('status', 'statut')
 
   if (iFirst === -1 && iFull === -1) {
@@ -50,19 +57,31 @@ export function parseCsv(text: string): CandidateInput[] {
       }
     }
     if (!first && !last) continue
-    const rawStatus = (cells[iStatus] ?? '').trim().toLowerCase()
+    const rawStatus = at(iStatus, cells).toLowerCase()
     out.push({
       first_name: first,
       last_name: last,
-      email: at(iEmail, cells) || null,
-      phone: at(iPhone, cells) || null,
-      birth_date: at(iBirth, cells) || null,
-      address: at(iAddress, cells) || null,
-      region: at(iRegion, cells) || null,
-      profession: at(iProfession, cells) || null,
-      motivation: at(iMotivation, cells) || null,
+      gender: nullable(iGender, cells),
+      phone: nullable(iPhone, cells),
+      email: nullable(iEmail, cells),
+      country_of_study: nullable(iCountryStudy, cells),
+      nationality: nullable(iNationality, cells),
+      city_village: nullable(iCity, cells),
+      level: nullable(iLevel, cells),
+      school: nullable(iSchool, cells),
+      school_category: nullable(iSchoolCategory, cells),
+      school_section: nullable(iSchoolSection, cells),
+      study_field: nullable(iStudyField, cells),
+      grade: nullable(iGrade, cells),
+      document_count: parseCount(at(iDocCount, cells)),
+      submitted_at: parseDate(at(iSubmittedAt, cells)),
       observation: at(iObservation, cells),
-      status: rawStatus === 'approved' ? 'approved' : rawStatus === 'rejected' ? 'rejected' : 'pending' as CandidateStatus
+      status:
+        rawStatus === 'approved'
+          ? 'approved'
+          : rawStatus === 'rejected'
+            ? 'rejected'
+            : ('pending' as CandidateStatus)
     })
   }
   return out
@@ -70,6 +89,27 @@ export function parseCsv(text: string): CandidateInput[] {
 
 function at(i: number, cells: string[]): string {
   return i >= 0 ? (cells[i] ?? '').trim() : ''
+}
+
+function nullable(i: number, cells: string[]): string | null {
+  const v = at(i, cells)
+  return v === '' ? null : v
+}
+
+/** « 2 » → 2 ; vide, « N/A » ou autre texte → null. */
+function parseCount(raw: string): number | null {
+  const digits = raw.match(/\d+/)
+  return digits ? Number(digits[0]) : null
+}
+
+/**
+ * « 11/22/2026, 5:20:58 PM » ou ISO → ISO 8601 ; illisible → null.
+ * (Le fichier exporté depuis l'app utilise déjà de l'ISO.)
+ */
+function parseDate(raw: string): string | null {
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
 function detectSeparator(text: string): ',' | ';' {
